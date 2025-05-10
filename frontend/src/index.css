@@ -1,0 +1,101 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 44 33% 98%;
+    --foreground: 35 10% 16%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 35 10% 16%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 35 10% 16%;
+
+    --primary: 42 60% 52%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 63% 10%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 44 12% 92%;
+    --muted-foreground: 35 8% 45%;
+
+    --accent: 44 30% 88%;
+    --accent-foreground: 35 10% 16%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 35 10% 80%;
+    --input: 35 10% 80%;
+    --ring: 42 60% 52%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 220 63% 10%;
+    --sidebar-foreground: 44 30% 88%;
+    --sidebar-primary: 42 60% 52%;
+    --sidebar-primary-foreground: 220 63% 10%;
+    --sidebar-accent: 220 40% 15%;
+    --sidebar-accent-foreground: 44 30% 88%;
+    --sidebar-border: 220 40% 15%;
+    --sidebar-ring: 42 60% 52%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif;
+  }
+}
+
+.hero-section {
+  background-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url('/hero-image.jpg');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: all 0.8s ease;
+}
+
+.reveal.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.hotel-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.gradient-border {
+  position: relative;
+}
+
+.gradient-border::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--hotel-gold), transparent);
+}

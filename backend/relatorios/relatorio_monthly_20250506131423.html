@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Relatório Financeiro - PousadaViva</title>
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                line-height: 1.6;
+                color: #333;
+                max-width: 210mm;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            .header, .footer {
+                text-align: center;
+                margin-bottom: 20px;
+                padding: 10px;
+                border-bottom: 1px solid #ddd;
+            }
+            .logo { 
+                max-height: 60px; 
+                margin-bottom: 10px;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+            }
+            th, td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+            }
+            th {
+                background-color: #f2f2f2;
+            }
+            tr:nth-child(even) {
+                background-color: #f9f9f9;
+            }
+            .summary {
+                margin-top: 20px;
+                padding: 10px;
+                background-color: #f2f2f2;
+                border-radius: 5px;
+            }
+            @media print {
+                body { margin: 0; padding: 15px; }
+                button { display: none; }
+            }
+            .print-btn {
+                background-color: #4CAF50;
+                color: white;
+                padding: 10px 15px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                margin-top: 20px;
+            }
+            .footer {
+                margin-top: 30px;
+                font-size: 12px;
+                color: #777;
+                border-top: 1px solid #ddd;
+                border-bottom: none;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            
+            <h1>PousadaViva - Relatório Financeiro</h1>
+            <p>Período: 01/05/2025 até 31/05/2025</p>
+        </div><h2>Relatório Mensal</h2><p>Nenhum dado financeiro encontrado para o período selecionado.</p><div class="footer">
+            <p>Relatório gerado em 06/05/2025 13:14:23</p>
+            <p>PousadaViva - Todos os direitos reservados.</p>
+        </div>
+        <button class="print-btn" onclick="window.print()">Imprimir Relatório</button>
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                // Auto print for PDF generation if needed
+            });
+        </script>
+    </body>
+    </html>

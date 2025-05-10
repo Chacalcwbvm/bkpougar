@@ -1,0 +1,833 @@
+import { useState, useEffect, useRef } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import ScrollReveal from "@/components/ui/ScrollReveal";
+import { useLanguage } from "@/context/LanguageContext";
+import axios from "axios";
+import { 
+  Plus, 
+  Trash2, 
+  Edit, 
+  Image, 
+  Upload,
+  Loader2 
+} from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+// Interface para os quartos
+interface Room {
+  id: number;
+  nome: string;
+  name?: string;
+  descricao?: string;
+  description?: string;
+  preco: number;
+  capacidade: number;
+  tamanho: number;
+  status: string;
+  imagem?: string;
+  image?: string;
+  amenities?: string[];
+  type?: string;
+  price?: number;
+  capacity?: number;
+}
+
+const AdminRooms = () => {
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [typeFilter, setTypeFilter] = useState("All");
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [isAddMode, setIsAddMode] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [roomToDelete, setRoomToDelete] = useState<number | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const { toast } = useToast();
+  const { t, language } = useLanguage();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const defaultRoom: Room = {
+    id: 0,
+    nome: "",
+    name: "",
+    descricao: "",
+    description: "",
+    preco: 0,
+    capacidade: 2,
+    tamanho: 20,
+    status: "disponivel",
+    imagem: "",
+    amenities: []
+  };
+
+  useEffect(() => {
+    fetchRooms();
+  }, [language]);
+
+  const fetchRooms = async () => {
+    setIsLoading(true);
+    try {
+      const response = await axios.get('http://localhost/pougar/backend/listar_quartos.php');
+      if (response.data) {
+        setRooms(Array.isArray(response.data) ? response.data : []);
+      } else {
+        setRooms([]);
+      }
+    } catch (error) {
+      console.error('Error fetching rooms:', error);
+      toast({
+        title: t("errorLoadingRooms"),
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive"
+      });
+      setRooms([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Filtering rooms based on search term, status, and type
+  const filteredRooms = rooms.filter(room => {
+    const matchesSearch = 
+      room.id.toString().includes(searchTerm) ||
+      (room.nome && room.nome.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (room.name && room.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+    const matchesStatus = statusFilter === "All" || 
+      (statusFilter === "Available" && room.status === "disponivel") ||
+      (statusFilter === "Occupied" && room.status === "ocupado") ||
+      (statusFilter === "Maintenance" && room.status === "manutencao");
+      
+    // For type, we might need to map from English UI to backend values
+    const matchesType = typeFilter === "All" || 
+      (room.nome && room.nome.toLowerCase().includes(typeFilter.toLowerCase())) ||
+      (room.name && room.name.toLowerCase().includes(typeFilter.toLowerCase()));
+    
+    return matchesSearch && matchesStatus && matchesType;
+  });
+
+  // Get unique room types for filter dropdown
+  const roomTypes = [...new Set(rooms.map(room => 
+    language === 'pt' ? room.nome : (room.name || room.nome || '')
+  ))];
+  
+  const handleViewDetails = (room: Room) => {
+    setSelectedRoom(room);
+    setIsEditMode(false);
+    setIsAddMode(false);
+    setIsModalOpen(true);
+  };
+  
+  const handleEdit = (room: Room) => {
+    setSelectedRoom(room);
+    setIsEditMode(true);
+    setIsAddMode(false);
+    setIsModalOpen(true);
+  };
+
+  const handleAddRoom = () => {
+    setSelectedRoom(defaultRoom);
+    setIsEditMode(false);
+    setIsAddMode(true);
+    setIsModalOpen(true);
+  };
+  
+  const handleStatusChange = async (id: number, newStatus: string) => {
+    try {
+      // Mapear os status da UI para os valores do backend
+      const backendStatus = newStatus === 'Available' ? 'disponivel' : 
+                           newStatus === 'Occupied' ? 'ocupado' : 'manutencao';
+      
+      const response = await axios.put('http://localhost/pougar/backend/admin/editar_quarto.php', {
+        id: id,
+        status: backendStatus
+      });
+      
+      if (response.data && response.data.sucesso) {
+        const updatedRooms = rooms.map(room => 
+          room.id === id ? { ...room, status: backendStatus } : room
+        );
+        
+        setRooms(updatedRooms);
+        
+        if (selectedRoom && selectedRoom.id === id) {
+          setSelectedRoom({ ...selectedRoom, status: backendStatus });
+        }
+        
+        toast({
+          title: t("statusUpdated"),
+          description: t("statusUpdatedDesc").replace("{id}", id.toString()).replace("{status}", newStatus),
+        });
+      } else {
+        throw new Error(response.data.erro || "Unknown error");
+      }
+    } catch (error) {
+      console.error('Error updating room status:', error);
+      toast({
+        title: t("errorLoadingRooms"),
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteRoom = (id: number) => {
+    setRoomToDelete(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteRoom = async () => {
+    if (!roomToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      const response = await axios.delete(`http://localhost/pougar/backend/admin/excluir_quarto.php?id=${roomToDelete}`);
+      
+      if (response.data && response.data.sucesso) {
+        setRooms(rooms.filter(room => room.id !== roomToDelete));
+        
+        toast({
+          title: t("roomDeleted"),
+          description: t("roomDeletedDesc").replace("{id}", roomToDelete.toString()),
+        });
+        
+        setDeleteDialogOpen(false);
+        setRoomToDelete(null);
+        
+        if (selectedRoom && selectedRoom.id === roomToDelete) {
+          setIsModalOpen(false);
+        }
+      } else {
+        throw new Error(response.data.erro || "Unknown error");
+      }
+    } catch (error) {
+      console.error('Error deleting room:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive"
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+  
+  const handleInputChange = (field: string, value: any) => {
+    if (!selectedRoom) return;
+    
+    // Para campos numéricos, convertemos para número
+    if (field === 'preco' || field === 'capacidade' || field === 'tamanho') {
+      value = Number(value);
+    }
+    
+    setSelectedRoom({
+      ...selectedRoom,
+      [field]: value,
+      // Para garantir que os campos em português e inglês sejam atualizados
+      ...(field === 'nome' ? {name: value} : {}),
+      ...(field === 'name' ? {nome: value} : {}),
+      ...(field === 'descricao' ? {description: value} : {}),
+      ...(field === 'description' ? {descricao: value} : {})
+    });
+  };
+  
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0 || !selectedRoom) return;
+    
+    const file = files[0];
+    const formData = new FormData();
+    formData.append('imagem', file);
+    
+    setUploadingImage(true);
+    
+    try {
+      const response = await axios.post('http://localhost/pougar/backend/upload_image.php', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      if (response.data && response.data.sucesso) {
+        setSelectedRoom({
+          ...selectedRoom,
+          imagem: response.data.arquivo,
+          image: response.data.arquivo
+        });
+        
+        toast({
+          title: t("imageUploaded"),
+          description: t("imageUploadedDesc"),
+        });
+      } else {
+        throw new Error(response.data.erro || "Unknown error");
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      toast({
+        title: t("errorUploadingImage"),
+        description: t("errorUploadingImageDesc"),
+        variant: "destructive"
+      });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+  
+  const handleSaveChanges = async () => {
+    if (!selectedRoom) return;
+    
+    setIsSubmitting(true);
+    
+    try {
+      let response;
+      
+      // Se estamos em modo de adição, usamos POST para criar um novo quarto
+      if (isAddMode) {
+        // Validar dados básicos
+        if (!selectedRoom.nome || selectedRoom.preco <= 0 || selectedRoom.capacidade <= 0) {
+          toast({
+            title: t("errorAddingRoom"),
+            description: "Por favor, preencha todos os campos obrigatórios: nome, preço e capacidade.",
+            variant: "destructive"
+          });
+          setIsSubmitting(false);
+          return;
+        }
+        
+        response = await axios.post('http://localhost/pougar/backend/admin/adicionar_quarto.php', {
+          nome: selectedRoom.nome,
+          name: selectedRoom.name || selectedRoom.nome,
+          descricao: selectedRoom.descricao || '',
+          description: selectedRoom.description || selectedRoom.descricao || '',
+          preco: selectedRoom.preco,
+          capacidade: selectedRoom.capacidade,
+          tamanho: selectedRoom.tamanho,
+          status: selectedRoom.status,
+          imagem: selectedRoom.imagem || ''
+        });
+        
+        if (response.data && response.data.sucesso) {
+          // Adicionar o novo quarto à lista com o ID gerado pelo backend
+          const newRoom = {
+            ...selectedRoom,
+            id: response.data.id
+          };
+          
+          setRooms([...rooms, newRoom]);
+          
+          toast({
+            title: t("roomAdded"),
+            description: t("roomAddedDesc"),
+          });
+          
+          setIsModalOpen(false);
+        }
+      } else {
+        // Se estamos em modo de edição, usamos PUT para atualizar um quarto existente
+        response = await axios.put('http://localhost/pougar/backend/admin/editar_quarto.php', {
+          id: selectedRoom.id,
+          nome: selectedRoom.nome,
+          name: selectedRoom.name || selectedRoom.nome,
+          descricao: selectedRoom.descricao || '',
+          description: selectedRoom.description || selectedRoom.description || '',
+          preco: selectedRoom.preco,
+          capacidade: selectedRoom.capacidade,
+          tamanho: selectedRoom.tamanho,
+          status: selectedRoom.status,
+          imagem: selectedRoom.imagem || ''
+        });
+        
+        if (response.data && response.data.sucesso) {
+          // Atualizar o quarto na lista
+          const updatedRooms = rooms.map(room => 
+            room.id === selectedRoom.id ? selectedRoom : room
+          );
+          
+          setRooms(updatedRooms);
+          
+          toast({
+            title: t("roomUpdated"),
+            description: t("roomUpdatedDesc").replace("{id}", selectedRoom.id.toString()),
+          });
+          
+          setIsModalOpen(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error saving room:', error);
+      toast({
+        title: isAddMode ? t("errorAddingRoom") : "Error",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const getDisplayStatus = (status: string) => {
+    if (status === 'disponivel') return t('available');
+    if (status === 'ocupado') return t('occupied');
+    if (status === 'manutencao') return t('maintenance');
+    return status;
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-serif font-bold">{t("roomManagement")}</h1>
+      </div>
+
+      <ScrollReveal>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex flex-col md:flex-row justify-between mb-6 space-y-4 md:space-y-0">
+              <div className="w-full md:w-1/3">
+                <Input
+                  placeholder={t("searchRooms")}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-wrap gap-4">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="border border-gray-300 rounded-md px-4 py-2"
+                >
+                  <option value="All">{t("allStatuses")}</option>
+                  <option value="Available">{t("available")}</option>
+                  <option value="Occupied">{t("occupied")}</option>
+                  <option value="Maintenance">{t("maintenance")}</option>
+                </select>
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="border border-gray-300 rounded-md px-4 py-2"
+                >
+                  <option value="All">{t("allTypes")}</option>
+                  {roomTypes.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+                <Button 
+                  className="bg-hotel-gold hover:bg-hotel-gold/80 text-white"
+                  onClick={handleAddRoom}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  {t("addNewRoom")}
+                </Button>
+              </div>
+            </div>
+
+            {isLoading ? (
+              <div className="text-center py-10">
+                <Loader2 className="h-10 w-10 animate-spin mx-auto text-hotel-gold" />
+                <p className="mt-4 text-gray-500">{t("loading")}</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredRooms.map((room) => (
+                  <div 
+                    key={room.id} 
+                    className="border rounded-lg overflow-hidden shadow-md"
+                  >
+                    <div className="h-48 overflow-hidden">
+                      <img 
+                        src={room.imagem ? `http://localhost/pougar/backend/uploads/${room.imagem}` : `/room${room.id % 6 + 1}.jpg`}
+                        alt={`Room ${room.id}`}
+                        className="w-full h-full object-cover" 
+                        onError={(e) => {
+                          // Fallback to a placeholder if the image fails to load
+                          (e.target as HTMLImageElement).src = '/placeholder.svg';
+                        }}
+                      />
+                    </div>
+                    <div className="p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h3 className="font-medium text-lg">
+                            {language === 'pt' ? room.nome : (room.name || room.nome)}
+                          </h3>
+                          <p className="text-sm text-gray-500">Room {room.id}</p>
+                        </div>
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          room.status === 'disponivel' 
+                            ? 'bg-green-100 text-green-800' 
+                            : room.status === 'ocupado'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {getDisplayStatus(room.status)}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-2 mb-4">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500">{t("capacity")}</span>
+                          <span>{room.capacidade} {room.capacidade === 1 ? t('guest') : t('guests')}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500">{t("pricePerNight")}</span>
+                          <span className="font-medium">${room.preco}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex justify-between mt-4">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleViewDetails(room)}
+                        >
+                          {t("viewDetails")}
+                        </Button>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleEdit(room)}
+                            className="text-blue-600"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleDeleteRoom(room.id)}
+                            className="text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                
+                {filteredRooms.length === 0 && !isLoading && (
+                  <div className="col-span-full text-center py-10">
+                    <p className="text-gray-500">{t("noRoomsFound")}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </ScrollReveal>
+
+      {/* Room Details/Edit/Add Modal */}
+      {isModalOpen && selectedRoom && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-medium">
+                  {isAddMode
+                    ? t("addRoom")
+                    : isEditMode 
+                    ? t("editRoom") 
+                    : t("roomDetails")}
+                </h2>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setIsModalOpen(false)}
+                >
+                  ✕
+                </Button>
+              </div>
+              
+              <div className="mb-6">
+                {(isEditMode || isAddMode) ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {t("roomName")} *
+                        </label>
+                        <Input
+                          value={language === 'pt' ? selectedRoom.nome : (selectedRoom.name || selectedRoom.nome)}
+                          onChange={(e) => handleInputChange(language === 'pt' ? 'nome' : 'name', e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {t("roomStatus")}
+                        </label>
+                        <select
+                          value={selectedRoom.status}
+                          onChange={(e) => handleInputChange('status', e.target.value)}
+                          className="w-full border border-gray-300 rounded-md p-2"
+                        >
+                          <option value="disponivel">{t("available")}</option>
+                          <option value="ocupado">{t("occupied")}</option>
+                          <option value="manutencao">{t("maintenance")}</option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {t("roomPrice")} * ($)
+                        </label>
+                        <Input
+                          type="number"
+                          value={selectedRoom.preco}
+                          onChange={(e) => handleInputChange('preco', e.target.value)}
+                          required
+                          min="0"
+                          step="1"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {t("roomCapacity")} *
+                        </label>
+                        <Input
+                          type="number"
+                          value={selectedRoom.capacidade}
+                          onChange={(e) => handleInputChange('capacidade', e.target.value)}
+                          required
+                          min="1"
+                          max="10"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {t("roomDescription")}
+                      </label>
+                      <textarea
+                        value={language === 'pt' ? selectedRoom.descricao : (selectedRoom.description || selectedRoom.descricao)}
+                        onChange={(e) => handleInputChange(language === 'pt' ? 'descricao' : 'description', e.target.value)}
+                        className="w-full border border-gray-300 rounded-md p-2"
+                        rows={3}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {t("roomImage")}
+                      </label>
+                      <div className="flex flex-col space-y-3">
+                        {selectedRoom.imagem && (
+                          <img 
+                            src={`http://localhost/pougar/backend/uploads/${selectedRoom.imagem}`}
+                            alt="Room"
+                            className="h-40 object-cover rounded-md"
+                            onError={(e) => {
+                              // Fallback to a placeholder if the image fails to load
+                              (e.target as HTMLImageElement).src = '/placeholder.svg';
+                            }}
+                          />
+                        )}
+                        <input 
+                          type="file" 
+                          ref={fileInputRef}
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          className="hidden"
+                        />
+                        <Button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          variant="outline"
+                          disabled={uploadingImage}
+                          className="flex items-center gap-2"
+                        >
+                          {uploadingImage ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Upload className="h-4 w-4" />
+                          )}
+                          {uploadingImage ? t("uploading") : t("uploadImage")}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex mb-4">
+                      <div className="w-1/3">
+                        <img 
+                          src={selectedRoom.imagem ? `http://localhost/pougar/backend/uploads/${selectedRoom.imagem}` : `/room${selectedRoom.id % 6 + 1}.jpg`}
+                          alt={`Room ${selectedRoom.id}`}
+                          className="w-full h-40 object-cover rounded-lg"
+                          onError={(e) => {
+                            // Fallback to a placeholder if the image fails to load
+                            (e.target as HTMLImageElement).src = '/placeholder.svg';
+                          }}
+                        />
+                      </div>
+                      <div className="w-2/3 pl-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="text-lg font-medium">
+                            {language === 'pt' ? selectedRoom.nome : (selectedRoom.name || selectedRoom.nome)}
+                          </h3>
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            selectedRoom.status === 'disponivel' 
+                              ? 'bg-green-100 text-green-800' 
+                              : selectedRoom.status === 'ocupado'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {getDisplayStatus(selectedRoom.status)}
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <p className="text-gray-500">Room {selectedRoom.id}</p>
+                          <p>{t("capacity")}: {selectedRoom.capacidade} {selectedRoom.capacidade === 1 ? t('guest') : t('guests')}</p>
+                          <p>{t("pricePerNight")}: ${selectedRoom.preco}</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {(selectedRoom.descricao || selectedRoom.description) && (
+                      <div className="mb-4">
+                        <h4 className="font-medium mb-2">{t("roomDescription")}</h4>
+                        <p className="text-gray-600">
+                          {language === 'pt' ? selectedRoom.descricao : (selectedRoom.description || selectedRoom.descricao)}
+                        </p>
+                      </div>
+                    )}
+                    
+                    <div>
+                      <h4 className="font-medium mb-2">{t("statusManagement")}</h4>
+                      <div className="flex flex-wrap gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className={`${selectedRoom.status === 'disponivel' ? 'bg-green-100' : ''}`}
+                          onClick={() => handleStatusChange(selectedRoom.id, 'Available')}
+                        >
+                          {t("markAvailable")}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className={`${selectedRoom.status === 'ocupado' ? 'bg-blue-100' : ''}`}
+                          onClick={() => handleStatusChange(selectedRoom.id, 'Occupied')}
+                        >
+                          {t("markOccupied")}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className={`${selectedRoom.status === 'manutencao' ? 'bg-red-100' : ''}`}
+                          onClick={() => handleStatusChange(selectedRoom.id, 'Maintenance')}
+                        >
+                          {t("markMaintenance")}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex justify-between mt-6 pt-6 border-t">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsModalOpen(false)}
+                >
+                  {(isEditMode || isAddMode) ? t("cancel") : t("close")}
+                </Button>
+                {isEditMode || isAddMode ? (
+                  <Button 
+                    className="bg-hotel-gold hover:bg-hotel-gold/80 text-white"
+                    onClick={handleSaveChanges}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        {t("processing")}
+                      </>
+                    ) : (
+                      t("saveChanges")
+                    )}
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={() => handleDeleteRoom(selectedRoom.id)}
+                      variant="outline"
+                      className="text-red-600 border-red-200 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      {t("delete")}
+                    </Button>
+                    <Button 
+                      onClick={() => setIsEditMode(true)}
+                      className="bg-hotel-gold hover:bg-hotel-gold/80 text-white"
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      {t("edit")}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("confirmDelete")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("confirmDeleteDesc")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>
+              {t("no")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                confirmDeleteRoom();
+              }}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  {t("processing")}
+                </>
+              ) : (
+                t("yes")
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+};
+
+export default AdminRooms;
